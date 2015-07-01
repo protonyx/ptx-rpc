@@ -3,7 +3,7 @@ import unittest
 import sys
 
 sys.path.append('..')
-import common.rpc as rpc
+import rpc
 #from common.rpc.errors import *
 #from common.rpc.server import *
 #from common.rpc.client import *

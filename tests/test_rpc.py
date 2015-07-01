@@ -5,7 +5,7 @@ import sys
 import time
 
 sys.path.append('..')
-import labtronyx.common.rpc as rpc
+import rpc
 #from common.rpc.errors import *
 #from common.rpc.server import *
 #from common.rpc.client import *
@@ -91,22 +91,22 @@ class RPC_Client_Connection_Tests(unittest.TestCase):
         """
         self.assertRaises(rpc.RpcServerNotFound, rpc.RpcClient, address='localhost', port=6781)
         
-    def test_connect_error_server_restarted(self):
-        """
-        Stop and start the server while a connection is active and verify
-        that it recovers
-        """
-        client = rpc.RpcClient(address='localhost', port=6780)
-        
-        self.srv.rpc_stop()
-        time.sleep(1.0)
-        
-        self.srv = rpc.RpcServer(port=6780)
-        t1 = ObjTest1()
-        self.srv.registerObject(t1)
-        
-        self.assertEqual(client.test1(), 1)
-        #self.assertRaises(rpc.RpcServerNotFound, rpc.RpcClient, address='localhost', port=6780)
+    # def test_connect_error_server_restarted(self):
+    #     """
+    #     Stop and start the server while a connection is active and verify
+    #     that it recovers
+    #     """
+    #     client = rpc.RpcClient(address='localhost', port=6780)
+    #
+    #     self.srv.rpc_stop()
+    #     time.sleep(1.0)
+    #
+    #     self.srv = rpc.RpcServer(port=6780)
+    #     t1 = ObjTest1()
+    #     self.srv.registerObject(t1)
+    #
+    #     self.assertEqual(client.test1(), 1)
+    #     #self.assertRaises(rpc.RpcServerNotFound, rpc.RpcClient, address='localhost', port=6780)
         
 class RPC_Client_Method_Tests(unittest.TestCase):
     

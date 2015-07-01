@@ -12,4 +12,7 @@ def main():
 
 def run():
     test_runner = unittest.TextTestRunner()
-    return test_runner.run(testsuite())
+    return test_runner.run(test_suite())
+
+if __name__ == '__main__':
+    main()

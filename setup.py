@@ -46,7 +46,7 @@ def build_package():
         license="MIT",
 
         # Packages
-        packages=['ptx-rpc'],
+        packages=['rpc'],
 
         # Package data - e.g. non-python modules
         #package_data = {},

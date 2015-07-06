@@ -46,7 +46,7 @@ def build_package():
         license="MIT",
 
         # Packages
-        packages=['rpc'],
+        packages=['ptxrpc'],
 
         # Package data - e.g. non-python modules
         #package_data = {},
@@ -68,10 +68,7 @@ def build_package():
         # Dependent packages (distributions)
         install_requires=[
             #"jsonlib2",
-            "pyvisa",
-            "pyserial",
-            "numpy",
-            "matplotlib",
+            "requests",
         ],
 
         # Unit tests

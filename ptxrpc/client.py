@@ -4,10 +4,12 @@ import select
 import logging
 import errno
 
-from jsonrpc import *
+import requests
+
 from errors import *
 
-class RpcClient(object):
+
+class PtxRpcClient(object):
     """
     Flexible RPC client that connects to an RpcServer instance either on a local
     host or remote host. Abstracts a remote object using the magic of Python.

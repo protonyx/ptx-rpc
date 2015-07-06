@@ -2,8 +2,9 @@ import unittest
 
 import sys
 
-sys.path.append('..')
-import rpc
+from ptxrpc.engines import jsonrpc
+import ptxrpc.engines as rpc
+
 #from common.rpc.errors import *
 #from common.rpc.server import *
 #from common.rpc.client import *
@@ -33,7 +34,7 @@ class rpc_test_object(object):
     def rpc_test_method_exception(self):
         raise RuntimeError
     
-class Json_Rpc_Tests(unittest.TestCase):
+class JsonRpc_Tests(unittest.TestCase):
     
     def setUp(self):
         self.test_obj = rpc_test_object()
@@ -41,10 +42,13 @@ class Json_Rpc_Tests(unittest.TestCase):
     def test_request(self):
         test = rpc.JsonRpcPacket()
         test.addRequest(1, 'test')
-        
-        requests = test.getRequests()
-        self.assertEqual(len(requests), 1)
-        self.assertEqual(requests[0].getMethod(), 'test')
+
+        test = rpc.RpcRequest()
+        test.id = 1
+        test.method = 'test'
+
+        data = jsonrpc.encode([test])
+
         
     def test_request_call_no_params(self):
         test = rpc.JsonRpcPacket()

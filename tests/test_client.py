@@ -1,8 +1,11 @@
 
 import threading
 import unittest
+import mock
 
 import ptxrpc as rpc
+
+# TODO: Use Mock instead of the test stubs below
 
 class ObjTest1(object):
     def test1(self):
@@ -17,13 +20,20 @@ class ObjTest2(object):
 
 class RPC_Client_Connection_Tests(unittest.TestCase):
 
+    @classmethod
     def setUpClass(self):
-        self.srv = rpc.PtxRpcServer(port=6780)
+        # Create a test object
+        test = mock.MagicMock(return_value=True)
+
+        # Start the RPC server
+        self.srv = rpc.PtxRpcServer(host='localhost', port=6780)
+        self.srv.register_path('', test)
 
         # Start the server in a new thread
         srv_thread = threading.Thread(target=self.srv.serve_forever)
         srv_thread.start()
 
+    @classmethod
     def tearDownClass(self):
         # Stop the server
         self.srv.shutdown()
@@ -31,7 +41,11 @@ class RPC_Client_Connection_Tests(unittest.TestCase):
         self.srv_thread.join()
 
     def test_connect(self):
-        client = rpc.PtxRpcClient(address='localhost', port=6780)
+        # Create a connection to the server
+        client = rpc.PtxRpcClient(uri='http://localhost:6780/')
+
+        # Call a dummy method
+        self.assertTrue(client.testConnection())
 
     def test_connect_error_no_server_running(self):
         """
@@ -60,15 +74,27 @@ class RPC_Client_Connection_Tests(unittest.TestCase):
 class RPC_Client_Method_Tests(unittest.TestCase):
 
     def setUp(self):
+        # Create a test object
+        test = mock.MagicMock(return_value=True)
+
         self.srv = rpc.PtxRpcServer(port=6780)
-        t1 = ObjTest1()
-        t2 = ObjTest2()
-        self.srv.registerObject(t1)
-        self.srv.registerObject(t2)
+        self.srv.register_path('', test)
+        # t1 = ObjTest1()
+        # t2 = ObjTest2()
+        # self.srv.registerObject(t1)
+        # self.srv.registerObject(t2)
+
+        # Start the server in a new thread
+        srv_thread = threading.Thread(target=self.srv.serve_forever)
+        srv_thread.start()
+
         self.client = rpc.RpcClient(address='localhost', port=6780)
 
     def tearDown(self):
-        self.srv.rpc_stop()
+        # Stop the server
+        self.srv.shutdown()
+        self.srv.server_close()
+        self.srv_thread.join()
 
     def test_get_methods(self):
         methods = self.client.rpc_getMethods()

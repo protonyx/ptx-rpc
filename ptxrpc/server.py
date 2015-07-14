@@ -61,7 +61,7 @@ class PtxRpcServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
 
         self.rpc_startTime = datetime.now()
 
-        if self.DEaBUG_RPC_SERVER:
+        if self.DEBUG_RPC_SERVER:
             self.logger.debug('[%s] RPC Server started on port %i', self.name, self.port)
 
         # Update port if randomly assigned

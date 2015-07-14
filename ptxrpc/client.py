@@ -3,10 +3,121 @@ import socket
 import select
 import logging
 import errno
+import string
+import httplib
 
 import requests
 
 from errors import *
+
+class HttpTransport(object):
+    """
+    HTTP Transport class based on the Transport class of xmlrpclib.py
+    """
+
+    user_agent = 'ptx-rpc/1.0'
+    content_type = 'application/json'
+
+    def request(self, host, handler, request_body):
+        """
+
+        """
+        for attempt in (0, 1):
+            try:
+                return self.single_request(host, handler, request_body)
+            except socket.error as e:
+                if attempt or e.errno not in (errno.ECONNRESET, errno.ECONNABORTED, errno.EPIPE):
+                    raise
+
+    def single_request(self, host, handler, request_body):
+        """
+
+        """
+        conn = self.make_connection(host)
+
+        try:
+            conn.putrequest("POST", handler)
+
+            # Send host data
+            extra_headers = self._extra_headers
+            if extra_headers:
+                if type(extra_headers) == dict:
+                    extra_headers = extra_headers.items()
+                for key, value in extra_headers:
+                    conn.putheader(key, value)
+
+            # Send user agent
+            conn.putheader("User-Agent", self.user_agent)
+
+            # Send content
+            conn.putheader("Content-Type", self.content_type)
+            conn.putheader("Content-Length", str(len(request_body)))
+
+            conn.endheaders(request_body)
+
+            # Get response
+            resp = conn.getresponse(buffering=True)
+
+            if resp.status == 200:
+                return self.parse_response(resp)
+
+        except Exception:
+            self.close()
+            raise
+
+        # TODO: Handle case where response status is not 200
+
+
+    def get_host_info(self, host):
+        """
+        Get authorization info from host parameter. Host may be a string, or a (host, x509-dict) tuple; if a string,
+        it is checked for a "user:pw@host" format, and a "Basic Authentication" header is added if appropriate.
+
+        :param host: Host descriptor (URL or (URL, x509 info) tuple)
+        :returns: A 3-tuple containing (actual host, extra headers, x509 info).  The header and x509 fields may be None.
+        """
+        x509 = {}
+        if type(host) == tuple:
+            host, x509 = host
+
+        import urllib
+        auth, host = urllib.splituser(host)
+
+        if auth:
+            import base64
+            auth = base64.encodestring(urllib.unquote(auth))
+            auth = string.join(string.split(auth), "") # get rid of whitespace
+            extra_headers = [
+                ("Authorization", "Basic " + auth)
+                ]
+        else:
+            extra_headers = None
+
+        return host, extra_headers, x509
+
+
+    def make_connection(self, host):
+        """
+        Open a connection or use an already open connection
+
+        :param host:
+        """
+        if self._connection and host == self._connection[0]:
+            return self._connection[1]
+
+        chost, self._extra_headers, x509 = self.get_host_info(host)
+        #store the host argument along with the connection object
+        self._connection = host, httplib.HTTPConnection(chost)
+        return self._connection[1]
+
+
+    def close(self):
+        """
+        Close any open connection
+        """
+        if self._connection[1]:
+            self._connection[1].close()
+            self._connection = (None, None)
 
 
 class PtxRpcClient(object):
@@ -35,10 +146,11 @@ class PtxRpcClient(object):
     RPC_TIMEOUT = 10.0
     RPC_MAX_PACKET_SIZE = 1048576 # 1MB
     
-    def __init__(self, address, port, **kwargs):
-        
-        self.address = self._resolveAddress(address)
-        self.port = port
+    def __init__(self, uri, **kwargs):
+
+        self.uri = uri
+        # self.address = self._resolveAddress(address)
+        # self.port = port
         self.logger = kwargs.get('logger', logging)
         self.timeout = self.RPC_TIMEOUT
         self.nextID = 1
@@ -49,14 +161,8 @@ class PtxRpcClient(object):
             raise RpcServerNotFound()
         
         self.methods = []
-        self._callbacks = {}
         
         self._connect()
-        self.note_socket = None
-            
-        # Update the hostname
-        self.hostname = self._rpcCall('rpc_getHostname')
-            
         self._setTimeout() # Default
         
     def _resolveAddress(self, address):
@@ -92,71 +198,7 @@ class PtxRpcClient(object):
         if self.socket is not None:
             self.socket.close()
             self.socket = None
-            
-    def _enableNotifications(self):
-        """
-        Open a UDP port and send a notification registration request to the
-        server.
-        
-        :returns: True if successful, False otherwise
-        """
-        try:
-            self.note_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self.note_socket.bind(('', 0))
-            self.note_socket.setblocking(0)
-            
-            # Get the IP Address of the socket bound to the server
-            address, _ = self.socket.getsockname()
-            # Get the port of the UDP socket
-            _, port = self.note_socket.getsockname()
-            
-            self._rpcCall('rpc_register', address, port)
-            
-            if self.DEBUG_RPC_CLIENT:
-                self.logger.debug("RPC Notifications enabled")
-            
-            return True
-        
-        except:
-            self.logger.exception("Exception while enabling notifications")
-            return False
-        
-    def _disableNotifications(self):
-        try:
-            address, _ = self.socket.getsockname()
-            self.note_socket.close()
-            
-            self._rpcCall('rpc_unregister', address)
-            
-            del self.note_socket
-        except:
-            pass
-        
-        return True
-    
-    def _registerCallback(self, event, method):
-        self._callbacks[event] = method
-    
-    def _checkNotifications(self):
-        try:
-            while True:
-                data = self.note_socket.recv(self.RPC_MAX_PACKET_SIZE)
-                
-                # Decode the RPC request
-                in_packet = JsonRpcPacket(data)
-                
-                requests = in_packet.getRequests()
-                for req in requests:
-                    method = req.getMethod()
-                    method = self._callbacks.get(method, None)
-                    
-                    if method is not None:
-                        # Return from notification is discarded
-                        req.call(method)
-                    
-                
-        except socket.error:
-            pass
+
     
     def _send(self, data_out):
         for attempt in range(2):
@@ -175,18 +217,7 @@ class PtxRpcClient(object):
                 self._connect()
                 #else:
                     #raise
-    
-    def _recv(self):
-        ready_to_read, _, _ = select.select([self.socket], [], [], self.timeout)
-        
-        if self.socket in ready_to_read:
-            data = ''
-            
-            # Continue reading from the socket until all data is received
-            while self.socket in select.select([self.socket], [], [], 0.0)[0]:
-                data += self.socket.recv(self.RPC_MAX_PACKET_SIZE)
-            
-            return data
+
             
     def _setTimeout(self, new_to=None):
         """
@@ -211,9 +242,6 @@ class PtxRpcClient(object):
     
     def _handleException(self, exception_object):
         raise NotImplementedError
-    
-    def __getattr__(self, name):
-        return lambda *args, **kwargs: self._rpcCall(name, *args, **kwargs)
     
     def _rpcCall(self, remote_method, *args, **kwargs):
         """
@@ -284,3 +312,26 @@ class PtxRpcClient(object):
     
     def __str__(self):
         return '<RPC Instance of %s:%s>' % (self.address, self.port)
+
+    class _RpcMethod(object):
+        """
+        RPC Method generator to bind a method call to an RPC server.
+
+        Based on xmlrpclib
+        """
+
+        def __init__(self, rpc_call, method_name):
+            self.__rpc_call = rpc_call
+            self.__method_name = method_name
+
+        def __getattr__(self, name):
+            # supports "nested" methods (e.g. examples.getStateName)
+            return self._RpcMethod(self.__rpc_call, "%s.%s" % (self.__method_name, name))
+
+        def __call__(self, *args, **kwargs):
+            return self.__rpc_call(self.__method_name, *args, **kwargs)
+
+    def __getattr__(self, name):
+        return self._RpcMethod(self._rpcCall, name)
+
+        #return lambda *args, **kwargs: self._rpcCall(name, *args, **kwargs)

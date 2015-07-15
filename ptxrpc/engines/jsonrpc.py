@@ -10,7 +10,7 @@ a utility helper class
 import json
 
 from .. import errors
-from . import RpcRequest, RpcResponse, RpcError
+from . import RpcRequest, RpcResponse
 
 def get_content_type():
     return 'application/json'
@@ -146,33 +146,40 @@ class JsonRpc_Response(RpcResponse):
                'result': self.result}
             
         return ret
+
+def generate_id():
+    next_id = 0
+
+    while 1:
+        next_id += 1
+        yield next_id
      
 #===============================================================================
 # JSON RPC Handlers
 #===============================================================================
 
-def _parseJsonRpcObject(self, rpc_dict):
+def _parseJsonRpcObject(rpc_dict):
     """
     Takes a dictionary and determines if it is an RPC request or response
     """
     if rpc_dict.get('jsonrpc') == '2.0':
         if 'method' in rpc_dict.keys() and type(rpc_dict.get('method')) is unicode:
             # Request object
-            self.requests.append(JsonRpc_Request(**rpc_dict))
+            return RpcRequest(**rpc_dict)
 
         elif 'id' in rpc_dict.keys() and 'result' in rpc_dict.keys():
             # Result response object
-            self.responses.append(JsonRpc_Response(**rpc_dict))
+            return RpcResponse(**rpc_dict)
 
         elif 'id' in rpc_dict.keys() and 'error' in rpc_dict.keys():
             # Error response object
             error_code = rpc_dict['error'].get('code', -32700)
             err_obj = JsonRpcErrors.get(error_code, JsonRpc_ParseError)
 
-            self.errors.append(err_obj(**rpc_dict))
+            return err_obj(**rpc_dict)
 
         else:
-            self.errors.append(JsonRpc_InvalidRequest(**rpc_dict))
+            return JsonRpc_InvalidRequest(**rpc_dict)
 
     else:
         return JsonRpc_InvalidRequest()
@@ -221,7 +228,7 @@ def decode(data):
         else:
             errors.append(JsonRpc_ParseError())
 
-    except:
+    except Exception as e:
         # No JSON object could be decoded
         errors.append(JsonRpc_ParseError())
 
@@ -238,6 +245,14 @@ def encode(requests, responses, errors):
     ret = []
 
     for rpc_obj in requests + responses + errors:
+        if type(rpc_obj) == RpcRequest:
+            rpc_obj.__class__ = JsonRpc_Request
+            rpc_obj.id = generate_id().next()
+
+        if type(rpc_obj) == RpcResponse:
+            rpc_obj.__class__ = JsonRpc_Response
+            rpc_obj.id = generate_id().next()
+
         rpc_dict = rpc_obj.export()
 
         ret.append(rpc_dict)

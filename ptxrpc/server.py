@@ -14,6 +14,7 @@ import BaseHTTPServer
 # Local Imports
 import engines
 from errors import *
+from engines import RpcRequest, RpcResponse
 
 
 class PtxRpcServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
@@ -56,8 +57,8 @@ class PtxRpcServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
         #self.engine = getattr(engines, engine)
             
         # RPC Path Handlers
-        self.rpc_paths = {'': self}
-        self.rpc_locks = {'': threading.Lock()}
+        self.rpc_paths = {}
+        self.rpc_locks = {}
 
         self.rpc_startTime = datetime.now()
 
@@ -116,15 +117,13 @@ class PtxRpcServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
                     data_size -= len(chunk)
 
                 # Process request, catch all errors
-                response = self.server.process_request(data, self.path)
+                response = self.rpc_process(data)
 
             except Exception as e:
                 # Unhandled server exception
                 self.send_response(500)
-
                 self.send_header("Content-length", "0")
                 self.end_headers()
-                self.wfile.write(response)
 
             else:
                 try:
@@ -157,7 +156,7 @@ class PtxRpcServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
             self.end_headers()
             self.wfile.write(response)
 
-        def process_request(self, data):
+        def rpc_process(self, data):
             engine = self.server.engine
             target = self.server.rpc_paths.get(self.path)
             lock   = self.server.rpc_locks.get(self.path)
@@ -178,7 +177,8 @@ class PtxRpcServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
 
             # Process requests
             for req in requests:
-                method_name = req.getMethod()
+                method_name = req.method
+                req_id = req.id
 
                 try:
                     with lock:
@@ -186,36 +186,34 @@ class PtxRpcServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
                         if hasattr(target, '_rpc'):
                             result = target._rpc(method_name)
 
-                        elif hasattr(target, method_name) and not req.method.startswith('_'):
+                        elif not method_name.startswith('_') and hasattr(target, method_name):
                             method = getattr(target, method_name)
                             result = req.call(method)
 
                         else:
-                            responses.append(engine.JsonRpc_MethodNotFound(id=req.id))
+                            responses.append(RpcMethodNotFound(id=req_id))
                             break
 
                     # Check if the request was a notification
-                    if req.id is not None:
-                        responses.append(engine.JsonRpc_Response(id=req.id,
-                                                                  result=result))
+                    if req_id is not None:
+                        responses.append(RpcResponse(id=req_id, result=result))
 
                 # Catch exceptions during method execution
                 # DO NOT ALLOW ANY EXCEPTIONS TO PASS THIS LEVEL
-                except TypeError:
-                    # Raised when arguments mismatch, but also other cases
-                    # Not a perfect solution, but whatever.
-                    responses.append(engine.JsonRpc_InvalidParams(id=req.id))
-                    self.logger.exception("RPC Server Type Error")
-
                 except Exception as e:
                     # Catch-all for everything else
-                    excp = engine.JsonRpc_ServerException(id=req.id)
+                    excp = RpcServerException(id=req_id)
                     excp.message = e.__class__.__name__
                     responses.append(excp)
+
                     self.logger.exception("RPC Server Exception")
+
+                # Remove the request from the queue
+                requests.remove(req)
 
             # Encode the outgoing data
             out_data = engine.encode(requests, responses, errors)
+            # TODO: Catch exceptions during engine encode
 
             return out_data
 

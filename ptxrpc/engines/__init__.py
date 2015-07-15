@@ -3,10 +3,11 @@ __author__ = 'kkennedy'
 __all__ = ['jsonrpc']
 
 class RpcRequest(object):
-    def __init__(self):
-        self.method = ''
-        self.args = []
-        self.kwargs = {}
+    def __init__(self, **kwargs):
+        self.id = kwargs.get('id', None)
+        self.method = kwargs.get('method', '')
+        self.args = kwargs.get('args', [])
+        self.kwargs = kwargs.get('kwargs', {})
 
     def call(self, target):
         # Invoke target method with stored arguments
@@ -14,7 +15,6 @@ class RpcRequest(object):
         return target(*self.params, **self.kwargs)
 
 class RpcResponse(object):
-    pass
-
-class RpcError(object):
-    pass
+    def __init__(self, **kwargs):
+        self.id = kwargs.get('id', None)
+        self.result = kwargs.get('result', None)

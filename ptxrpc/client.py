@@ -5,10 +5,12 @@ import logging
 import errno
 import string
 import httplib
+import importlib
 
 import requests
 
 from errors import *
+from engines import RpcRequest, RpcResponse
 
 class HttpTransport(object):
     """
@@ -17,6 +19,9 @@ class HttpTransport(object):
 
     user_agent = 'ptx-rpc/1.0'
     content_type = 'application/json'
+
+    def __init__(self):
+        self._connection = (None, None)
 
     def request(self, host, handler, request_body):
         """
@@ -148,22 +153,29 @@ class PtxRpcClient(object):
     
     def __init__(self, uri, **kwargs):
 
+        import urllib
         self.uri = uri
+        self.uri_type, uri = urllib.splittype(uri)
+        self.host, self.path = urllib.splithost(uri)
+
         # self.address = self._resolveAddress(address)
         # self.port = port
         self.logger = kwargs.get('logger', logging)
-        self.timeout = self.RPC_TIMEOUT
-        self.nextID = 1
-        
+
+        # Data Transport, http is the default
+        self._transport = kwargs.get('transport', HttpTransport)()
+
+        # Encode/Decode Engine, jsonrpc is the default
+        engine_name = kwargs.get('engine', 'jsonrpc')
+        self.engine = importlib.import_module('ptxrpc.engines.%s' % engine_name)
+
         self.rpc_lock = threading.Lock()
         
-        if self.port is None:
-            raise RpcServerNotFound()
-        
         self.methods = []
-        
+
+        # Attempt a connection, throw exception if no response
+        # TODO: Do we even care if there was no response?
         self._connect()
-        self._setTimeout() # Default
         
     def _resolveAddress(self, address):
         try:
@@ -174,62 +186,6 @@ class PtxRpcClient(object):
             # Assume a hostname was given
             #self.hostname = address
             return socket.gethostbyname(address)
-        
-    def _connect(self):
-        # Open a TCP socket
-        try:
-            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.socket.connect((self.address, self.port))
-            self.socket.setblocking(0)
-            self.socket.settimeout(self.timeout)
-        
-        except socket.error as e:
-            if e.errno in [errno.ECONNREFUSED, errno.ECONNRESET, errno.ETIMEDOUT]:
-                raise RpcServerNotFound()
-            
-            else:
-                raise
-            
-        except:
-            self.socket = None
-            raise
-        
-    def _disconnect(self):
-        if self.socket is not None:
-            self.socket.close()
-            self.socket = None
-
-    
-    def _send(self, data_out):
-        for attempt in range(2):
-            try:
-                self.socket.send(data_out)
-                
-                if self.DEBUG_RPC_CLIENT:
-                    self.logger.debug('RPC TX: %s bytes', len(data_out))
-                
-                break
-                
-            except socket.error as e:
-                # Windows Error #10057 also triggers this
-                #if e.errno == errno.ECONNRESET:
-                self._disconnect()
-                self._connect()
-                #else:
-                    #raise
-
-            
-    def _setTimeout(self, new_to=None):
-        """
-        Set the Timeout limit for an RPC Method call
-        
-        :param new_to: New Timeout time in seconds
-        :type new_to: float
-        """
-        if new_to is not None:
-            self.timeout = float(new_to)
-        else:
-            self.timeout = self.RPC_TIMEOUT
             
     def _getHostname(self):
         return self.hostname
@@ -256,57 +212,50 @@ class PtxRpcClient(object):
             - RuntimeError when the remote host sent back a server error
             - Rpc_Timeout when the request times out
         """
+        req = self.engine.RpcRequest(method=remote_method,
+                                     args=args,
+                                     kwargs=kwargs)
+
         # Encode the RPC Request
-        nextID = int(self.nextID)
-        self.nextID += 1
-        packet = JsonRpcPacket()
-        packet.addRequest(nextID, remote_method, *args, **kwargs)
+        data = self.engine.encode([req], [], [])
         
         # Send the encoded request
-        out_str = packet.export()
-        
-        # Retry if there is an error
-        for attempt in range(2):
-            try:
-                # Lock against concurrent access
-                with self.rpc_lock:
-                    self._send(out_str)
-                    
-                    # Wait for return data or timeout
-                    data = self._recv()
-                
-                if data:
-                    packet = JsonRpcPacket(data)
-                    errors = packet.getErrors()
-                    responses = packet.getResponses()
-                    
-                    if len(errors) > 0:
-                        # There is a problem if there are more than one errors,
-                        # so just check the first one
-                        recv_error = errors[0]
-                        err_obj = JsonRpc_to_RpcErrors.get(type(recv_error), RpcError)
-                        try:
-                            # Create a subclass hook for exception handling
-                            self._handleException(err_obj)
-                        except NotImplementedError:
-                            raise err_obj(recv_error.message)
-                    
-                    elif len(responses) == 1:
-                        resp = responses[0]
-                        return resp.getResult()
-                
-                    else:
-                        raise RpcInvalidPacket("An incorrectly formatted packet was recieved")
-                    
-                else:
-                    # Timeout
-                    raise RpcTimeout("The operation timed out")
-                    
-            except socket.error as e:
-                raise
-                        
-            except RpcInvalidPacket:
-                self.logger.exception("Invalid RPC Packet")
+        with self.rpc_lock:
+            resp_data = self._transport.single_request(self.host, self.path, data)
+
+        if resp_data is None:
+            raise RpcError("Server returned empty data")
+
+        # Decode the returned data
+        requests, responses, errors = self.engine.decode(resp_data)
+
+        if len(errors) > 0:
+            # There is a problem if there are more than one errors,
+            # so just check the first one
+            recv_error = errors[0]
+            if isinstance(recv_error, RpcInvalidPacket):
+                pass
+
+            elif isinstance(recv_error, RpcServerException):
+                pass
+
+            elif isinstance(recv_error, RpcMethodNotFound):
+                raise AttributeError()
+
+            elif isinstance(recv_error, RpcError):
+                pass
+
+            else:
+                raise RpcError()
+
+
+        elif len(responses) == 1:
+            resp = responses[0]
+            return resp.getResult()
+
+        else:
+            raise RpcInvalidPacket("An incorrectly formatted packet was received")
+
                     
         raise RpcTimeout("The operation timed out")
     

@@ -23,11 +23,12 @@ class RPC_Client_Connection_Tests(unittest.TestCase):
     @classmethod
     def setUpClass(self):
         # Create a test object
-        test = mock.MagicMock(return_value=True)
+        test = mock.MagicMock()
+        del test._rpc
 
         # Start the RPC server
         self.srv = rpc.PtxRpcServer(host='localhost', port=6780)
-        self.srv.register_path('', test)
+        self.srv.register_path('/', test)
 
         # Start the server in a new thread
         srv_thread = threading.Thread(target=self.srv.serve_forever)

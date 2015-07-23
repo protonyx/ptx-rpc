@@ -12,7 +12,7 @@ class RpcRequest(object):
     def call(self, target):
         # Invoke target method with stored arguments
         # Don't attempt to catch exceptions here, let them bubble up
-        return target(*self.params, **self.kwargs)
+        return target(*self.args, **self.kwargs)
 
 class RpcResponse(object):
     def __init__(self, **kwargs):

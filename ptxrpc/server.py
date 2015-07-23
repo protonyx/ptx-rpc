@@ -162,58 +162,61 @@ class PtxRpcServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
             lock   = self.server.rpc_locks.get(self.path)
 
             # Decode the incoming data
-            requests, responses, errors = engine.decode(data)
+            requests, _, rpc_errors = engine.decode(data)
 
             # Process responses
-            for resp in responses:
-                # TODO: Figure out what to do with responses
-                # For now, ignore all responses
-                responses.remove(resp)
-
-            # Process errors
-            for err in errors:
-                # TODO: Log all errors received from a client
-                errors.remove(err)
+            # For now, ignore all responses
+            responses = []
 
             # Process requests
-            for req in requests:
-                method_name = req.method
-                req_id = req.id
+            if len(rpc_errors) != 0:
+                # Process errors
+                for err in rpc_errors:
+                    # Move errors into the responses list
+                    responses.append(err)
 
-                try:
-                    with lock:
-                        # RPC hook for target objects, allows the object to dispatch the request
-                        if hasattr(target, '_rpc'):
-                            result = target._rpc(method_name)
+            else:
+                # Only process requests if no errors were encountered
+                if len(requests) > 0:
+                    pass
 
-                        elif not method_name.startswith('_') and hasattr(target, method_name):
-                            method = getattr(target, method_name)
-                            result = req.call(method)
+                for req in requests:
+                    method_name = req.method
+                    req_id = req.id
 
-                        else:
-                            responses.append(RpcMethodNotFound(id=req_id))
-                            break
+                    try:
+                        with lock:
+                            # RPC hook for target objects, allows the object to dispatch the request
+                            if hasattr(target, '_rpc'):
+                                result = target._rpc(method_name)
 
-                    # Check if the request was a notification
-                    if req_id is not None:
-                        responses.append(RpcResponse(id=req_id, result=result))
+                            elif not method_name.startswith('_') and hasattr(target, method_name):
+                                method = getattr(target, method_name)
+                                result = req.call(method)
 
-                # Catch exceptions during method execution
-                # DO NOT ALLOW ANY EXCEPTIONS TO PASS THIS LEVEL
-                except Exception as e:
-                    # Catch-all for everything else
-                    excp = RpcServerException(id=req_id)
-                    excp.message = e.__class__.__name__
-                    responses.append(excp)
+                            else:
+                                responses.append(RpcMethodNotFound(id=req_id))
+                                break
 
-                    self.logger.exception("RPC Server Exception")
+                        # Check if the request was a notification
+                        if req_id is not None:
+                            responses.append(RpcResponse(id=req_id, result=result))
 
-                # Remove the request from the queue
-                requests.remove(req)
+                    # Catch exceptions during method execution
+                    # DO NOT ALLOW ANY EXCEPTIONS TO PASS THIS LEVEL
+                    except Exception as e:
+                        # Catch-all for everything else
+                        excp = RpcServerException(id=req_id)
+                        excp.message = e.__class__.__name__
+                        responses.append(excp)
 
             # Encode the outgoing data
-            out_data = engine.encode(requests, responses, errors)
-            # TODO: Catch exceptions during engine encode
+            try:
+                out_data = engine.encode([], responses)
+
+            except Exception as e:
+                # Encoder errors are RPC Errors
+                out_data = engine.encode([], [RpcError()])
 
             return out_data
 
@@ -253,3 +256,18 @@ class PtxRpcServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
         """
         delta = datetime.now() - self.rpc_startTime
         return delta.total_seconds()
+
+if __name__ == '__main__':
+    import mock
+
+    # Create a test object
+    test = mock.MagicMock()
+    del test._rpc
+
+    # Start the RPC server
+    srv = PtxRpcServer(host='localhost', port=6780)
+    srv.register_path('/', test)
+
+    # Start the server in a new thread
+    srv_thread = threading.Thread(target=srv.serve_forever)
+    srv_thread.start()

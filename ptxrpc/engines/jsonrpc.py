@@ -18,6 +18,11 @@ def get_content_type():
 #===============================================================================
 # Error Type
 #===============================================================================
+
+def error_encode(obj):
+    return {'jsonrpc': '2.0',
+            'id': obj.id,
+            'error': {'code': obj.code, 'message': obj.message}}
                  
 class JsonRpc_Error(errors.RpcError):
     code = None
@@ -38,32 +43,49 @@ class JsonRpc_Error(errors.RpcError):
         return repr(str(self.message))
         
     def export(self):
-        return {'id': self.id,
-                'error': {'code': self.code, 'message': self.message}}
+        return error_encode(self)
 
 class JsonRpc_ParseError(errors.RpcInvalidPacket):
     code = -32700
     message = 'Invalid JSON was received by the server.'
 
+    def export(self):
+        return error_encode(self)
+
 class JsonRpc_InvalidRequest(errors.RpcInvalidPacket):
     code = -32600
     message = 'The JSON sent is not a valid Request object.'
+
+    def export(self):
+        return error_encode(self)
 
 class JsonRpc_MethodNotFound(errors.RpcMethodNotFound):
     code = -32601
     message = 'The method does not exist / is not available.'
 
+    def export(self):
+        return error_encode(self)
+
 class JsonRpc_InvalidParams(errors.RpcServerException):
     code = -32602
     message = 'Invalid method parameter(s).'
+
+    def export(self):
+        return error_encode(self)
 
 class JsonRpc_InternalError(errors.RpcServerException):
     code = -32603
     message = 'Internal JSON-RPC error.'
 
+    def export(self):
+        return error_encode(self)
+
 class JsonRpc_ServerException(errors.RpcServerException):
     code = -32000
     message = 'An unhandled server exception occurred'
+
+    def export(self):
+        return error_encode(self)
 
 JsonRpcErrors = {  -32700: JsonRpc_ParseError,
                    -32600: JsonRpc_InvalidRequest,
@@ -165,7 +187,32 @@ def _parseJsonRpcObject(rpc_dict):
     if rpc_dict.get('jsonrpc') == '2.0':
         if 'method' in rpc_dict.keys() and type(rpc_dict.get('method')) is unicode:
             # Request object
-            return RpcRequest(**rpc_dict)
+            req = RpcRequest(**rpc_dict)
+
+            req.kwargs = rpc_dict.get('kwargs', {})
+            req.args = rpc_dict.get('params', [])
+            if type(req.args) == dict:
+                req.kwargs = req.args
+                req.args = []
+
+            # if len(args) > 0 and len(kwargs) > 0:
+            #     # Multiple parameter types
+            #     req.args = args
+            #     req.kwargs = kwargs
+            # elif len(args) > 0 and len(kwargs) == 0:
+            #     # Only positional parameters
+            #     req.args = args
+            #     req.kwargs = {}
+            # elif len(args) == 0 and len(kwargs) > 0:
+            #     # Only keyword parameters
+            #     req.args = []
+            #     req.kwargs = kwargs
+            # else:
+            #     # No parameters?
+            #     req.args = args
+            #     req.kwargs = kwargs
+
+            return req
 
         elif 'id' in rpc_dict.keys() and 'result' in rpc_dict.keys():
             # Result response object
@@ -192,7 +239,7 @@ def decode(data):
     """
     requests = []
     responses = []
-    errors = []
+    rpc_errors = []
 
     try:
         req = json.loads(data)
@@ -206,14 +253,14 @@ def decode(data):
                         requests.append(res)
                     elif isinstance(res, RpcResponse):
                         responses.append(res)
-                    elif isinstance(res, RpcError):
-                        errors.append(res)
+                    elif isinstance(res, errors.RpcError):
+                        rpc_errors.append(res)
 
                 except:
-                    errors.append(JsonRpc_InvalidRequest())
+                    rpc_errors.append(JsonRpc_InvalidRequest())
 
             if len(req) == 0:
-                errors.append(JsonRpc_InvalidRequest())
+                rpc_errors.append(JsonRpc_InvalidRequest())
 
         elif type(req) == dict:
             # Single request
@@ -222,36 +269,38 @@ def decode(data):
                 requests.append(res)
             elif isinstance(res, RpcResponse):
                 responses.append(res)
-            elif isinstance(res, RpcError):
-                errors.append(res)
+            elif isinstance(res, errors.RpcError):
+                rpc_errors.append(res)
 
         else:
-            errors.append(JsonRpc_ParseError())
+            rpc_errors.append(JsonRpc_ParseError())
 
     except Exception as e:
         # No JSON object could be decoded
-        errors.append(JsonRpc_ParseError())
+        rpc_errors.append(JsonRpc_ParseError())
 
-    return (requests, responses, errors)
+    return (requests, responses, rpc_errors)
 
-def encode(requests, responses, errors):
+def encode(requests, responses):
     """
 
     :param requests:
     :param responses:
-    :param errors:
     :return: str
     """
     ret = []
 
-    for rpc_obj in requests + responses + errors:
+    for rpc_obj in requests + responses:
         if type(rpc_obj) == RpcRequest:
             rpc_obj.__class__ = JsonRpc_Request
+            # Generate new ID for requests
             rpc_obj.id = generate_id().next()
 
         if type(rpc_obj) == RpcResponse:
             rpc_obj.__class__ = JsonRpc_Response
-            rpc_obj.id = generate_id().next()
+
+        if isinstance(rpc_obj, errors.RpcError) and type(rpc_obj) not in JsonRpcErrors.values():
+            rpc_obj.__class__ = JsonRpc_error_map.get(type(rpc_obj), JsonRpc_InternalError)
 
         rpc_dict = rpc_obj.export()
 

@@ -4,7 +4,7 @@ import threading
 
 import ptxrpc as rpc
     
-class RPC_Server_Tests(unittest.TestCase):
+class RPC_Server_Functional_Tests(unittest.TestCase):
     def test_server_init_thread(self):
         srv = rpc.PtxRpcServer('', 6780)
 

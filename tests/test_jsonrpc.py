@@ -1,212 +1,249 @@
 import unittest
+import mock
 
-import sys
+import threading
+import requests
 
-from ptxrpc.engines import jsonrpc
-import ptxrpc.engines as rpc
-
-#from common.rpc.errors import *
-#from common.rpc.server import *
-#from common.rpc.client import *
-
-class rpc_test_object(object):
-    def rpc_test_method_int(self):
-        return 1
+import ptxrpc.engines.jsonrpc as jsonrpc
+import ptxrpc as rpc
     
-    def rpc_test_method_multi_pos(self, param1, param2):
-        if param1 == 1 and param2 == 2:
-            return True
-        else:
-            return False
-        
-    def rpc_test_method_multi_named(self, **kwargs):
-        if kwargs.get('param1') == 1 and kwargs.get('param2') == 2:
-            return True
-        else:
-            return False
-        
-    def rpc_test_method_multi_combo(self, param1, **kwargs):
-        if param1 == 1 and kwargs.get('param2') == 2:
-            return True
-        else:
-            return False
-    
-    def rpc_test_method_exception(self):
-        raise RuntimeError
-    
-class JsonRpc_Tests(unittest.TestCase):
-    
-    def setUp(self):
-        self.test_obj = rpc_test_object()
-    
-    def test_request(self):
-        test = rpc.JsonRpcPacket()
-        test.addRequest(1, 'test')
+class RPC_Server_JsonRpc_Tests(unittest.TestCase):
+    """
+    Test the functionality of the server using the jsonrpc engine
 
-        test = rpc.RpcRequest()
-        test.id = 1
-        test.method = 'test'
+    Bypasses the client class to send commands directly to the server.
 
-        data = jsonrpc.encode([test])
+    Uses the requests library to simplify unittest code
+    """
 
-        
-    def test_request_call_no_params(self):
-        test = rpc.JsonRpcPacket()
-        test.addRequest(1, 'rpc_test_method_int')
-        
-        requests = test.getRequests()
-        test_req = requests.pop()
-        test_ret = test_req.call(self.test_obj.rpc_test_method_int)
-        
-        self.assertEqual(test_ret, 1)
-        
+    @classmethod
+    def setUpClass(self):
+        # Create a test object
+        test = mock.MagicMock()
+        del test._rpc
+        test.subtract = lambda subtrahend, minuend: int(subtrahend) - int(minuend)
+        test.foobar = mock.MagicMock(return_value=None)
+        test.raise_exception = mock.MagicMock(side_effect=RuntimeError)
+
+        # Start the RPC server
+        self.srv = rpc.PtxRpcServer(host='localhost', port=6780, engine='jsonrpc')
+        self.srv.register_path('/', test)
+
+        # Start the server in a new thread
+        self.srv_thread = threading.Thread(target=self.srv.serve_forever)
+        self.srv_thread.start()
+
+    @classmethod
+    def tearDownClass(self):
+        # Stop the server
+        self.srv.shutdown()
+        self.srv.server_close()
+        self.srv_thread.join()
+    
     def test_request_call_multi_pos_param(self):
-        test = rpc.JsonRpcPacket()
-        test.addRequest(1, 'rpc_test_method_multi_pos', 1, 2)
-        
-        requests = test.getRequests()
-        test_req = requests.pop()
-        test_ret = test_req.call(self.test_obj.rpc_test_method_multi_pos)
-        
-        self.assertTrue(test_ret)
-        
+        req = '{"jsonrpc": "2.0", "method": "subtract", "params": [42, 23], "id": 1}'
+
+        resp = requests.post('http://localhost:6780/', data=req)
+        self.assertEqual(resp.status_code, 200)
+
+        rpc_req, rpc_resp, rpc_err = jsonrpc.decode(resp.content)
+
+        self.assertEqual(len(rpc_req), 0)
+        self.assertEqual(len(rpc_resp), 1)
+        self.assertEqual(len(rpc_err), 0)
+
+        rpc_resp = rpc_resp[0]
+        self.assertEqual(rpc_resp.result, 19)
+        self.assertEqual(rpc_resp.id, 1)
+
     def test_request_call_multi_named_param(self):
-        test = rpc.JsonRpcPacket()
-        test.addRequest(1, 'rpc_test_method_multi_named', param1=1, param2=2)
-        
-        requests = test.getRequests()
-        test_req = requests.pop()
-        test_ret = test_req.call(self.test_obj.rpc_test_method_multi_named)
-        
-        self.assertTrue(test_ret)
-        
+        req = '{"jsonrpc": "2.0", "method": "subtract", "params": {"subtrahend": 42, "minuend": 23}, "id": 3}'
+
+        resp = requests.post('http://localhost:6780/', data=req)
+        self.assertEqual(resp.status_code, 200)
+
+        rpc_req, rpc_resp, rpc_err = jsonrpc.decode(resp.content)
+
+        self.assertEqual(len(rpc_req), 0)
+        self.assertEqual(len(rpc_resp), 1)
+        self.assertEqual(len(rpc_err), 0)
+
+        rpc_resp = rpc_resp[0]
+        self.assertEqual(rpc_resp.result, 19)
+        self.assertEqual(rpc_resp.id, 3)
+
+    def test_request_call_no_params(self):
+        req = '{"jsonrpc": "2.0", "method": "foobar", "id": 2}'
+
+        resp = requests.post('http://localhost:6780/', data=req)
+        self.assertEqual(resp.status_code, 200)
+
+        rpc_req, rpc_resp, rpc_err = jsonrpc.decode(resp.content)
+
+        self.assertEqual(len(rpc_req), 0)
+        self.assertEqual(len(rpc_resp), 1)
+        self.assertEqual(len(rpc_err), 0)
+
+        rpc_resp = rpc_resp[0]
+        self.assertEqual(rpc_resp.result, None)
+        self.assertEqual(rpc_resp.id, 2)
+
     def test_request_call_multi_combo_param(self):
-        test = rpc.JsonRpcPacket()
-        test.addRequest(1, 'rpc_test_method_multi_combo', 1, param2=2)
-        
-        requests = test.getRequests()
-        test_req = requests.pop()
-        test_ret = test_req.call(self.test_obj.rpc_test_method_multi_combo)
-        
-        self.assertTrue(test_ret)
-        
+        req = '{"jsonrpc": "2.0", "method": "subtract", "params": [42], "kwargs": {"minuend": 23}, "id": 3}'
+
+        resp = requests.post('http://localhost:6780/', data=req)
+        self.assertEqual(resp.status_code, 200)
+
+        rpc_req, rpc_resp, rpc_err = jsonrpc.decode(resp.content)
+
+        self.assertEqual(len(rpc_req), 0)
+        self.assertEqual(len(rpc_resp), 1)
+        self.assertEqual(len(rpc_err), 0)
+
+        rpc_resp = rpc_resp[0]
+        self.assertEqual(rpc_resp.result, 19)
+        self.assertEqual(rpc_resp.id, 3)
+
     def test_request_call_exception(self):
-        test = rpc.JsonRpcPacket()
-        test.addRequest(1, 'rpc_test_method_int')
+        req = '{"jsonrpc": "2.0", "method": "raise_exception", "id": 4}'
+
+        resp = requests.post('http://localhost:6780/', data=req)
+        self.assertEqual(resp.status_code, 200)
+
+        rpc_req, rpc_resp, rpc_err = jsonrpc.decode(resp.content)
+
+        self.assertEqual(len(rpc_req), 0)
+        self.assertEqual(len(rpc_resp), 0)
+        self.assertEqual(len(rpc_err), 1)
+
+        rpc_err = rpc_err[0]
+        self.assertEqual(type(rpc_err), jsonrpc.JsonRpc_ServerException)
+
+    def test_request_error_invalid_json(self):
+        req = '{"jsonrpc": "2.0", "method": "foobar, "params": "bar", "baz]'
         
-        requests = test.getRequests()
-        test_req = requests.pop()
-        test_ret = test_req.call(self.test_obj.rpc_test_method_int)
+        resp = requests.post('http://localhost:6780/', data=req)
+        self.assertEqual(resp.status_code, 200)
+
+        rpc_req, rpc_resp, rpc_err = jsonrpc.decode(resp.content)
+
+        self.assertEqual(len(rpc_req), 0)
+        self.assertEqual(len(rpc_resp), 0)
+        self.assertEqual(len(rpc_err), 1)
+
+        rpc_err = rpc_err[0]
+        self.assertEqual(type(rpc_err), jsonrpc.JsonRpc_ParseError)
+
+    def test_request_error_invalid_request(self):
+        req = '{"jsonrpc": "2.0", "method": 1, "params": "bar"}'
         
-        self.assertEqual(test_ret, 1)
-    
-    def test_decode(self):
-        test_str = '{"jsonrpc": "2.0", "method": "test", "params": {}, "id": 1}'
+        resp = requests.post('http://localhost:6780/', data=req)
+        self.assertEqual(resp.status_code, 200)
+
+        rpc_req, rpc_resp, rpc_err = jsonrpc.decode(resp.content)
+
+        self.assertEqual(len(rpc_req), 0)
+        self.assertEqual(len(rpc_resp), 0)
+        self.assertEqual(len(rpc_err), 1)
+
+        rpc_err = rpc_err[0]
+        self.assertEqual(type(rpc_err), jsonrpc.JsonRpc_InvalidRequest)
+
+    def test_request_error_parse_empty_request(self):
+        req = '{}'
         
-        test = rpc.JsonRpcPacket(test_str)
-        requests = test.getRequests()
-        self.assertEqual(len(requests), 1)
-        self.assertEqual(requests[0].getMethod(), 'test')
-        
-        errors = test.getErrors()
-        self.assertEqual(len(errors), 0)
-        
-    def test_decode_error_invalid_json(self):
-        test_str = '{"jsonrpc": "2.0", "method": "foobar, "params": "bar", "baz]'
-        
-        test = rpc.JsonRpcPacket(test_str)
-        requests = test.getRequests()
-        self.assertEqual(len(requests), 0)
-        
-        errors = test.getErrors()
-        self.assertEqual(len(errors), 1)
-        self.assertEqual(type(errors[0]), rpc.JsonRpc_ParseError)
-        
-    def test_decode_error_invalid_request(self):
-        test_str = '{"jsonrpc": "2.0", "method": 1, "params": "bar"}'
-        
-        test = rpc.JsonRpcPacket(test_str)
-        requests = test.getRequests()
-        self.assertEqual(len(requests), 0)
-        
-        errors = test.getErrors()
-        self.assertEqual(len(errors), 1)
-        self.assertEqual(type(errors[0]), rpc.JsonRpc_InvalidRequest)
-        
-    def test_decode_error_parse_empty_request(self):
-        test_str = '{}'
-        
-        test = rpc.JsonRpcPacket(test_str)
-        requests = test.getRequests()
-        self.assertEqual(len(requests), 0)
-        
-        errors = test.getErrors()
-        self.assertEqual(len(errors), 1)
-        self.assertEqual(type(errors[0]), rpc.JsonRpc_InvalidRequest)
-        
-    def test_decode_error_batch_invalid_json(self):
-        test_str = '[\
+        resp = requests.post('http://localhost:6780/', data=req)
+        self.assertEqual(resp.status_code, 200)
+
+        rpc_req, rpc_resp, rpc_err = jsonrpc.decode(resp.content)
+
+        self.assertEqual(len(rpc_req), 0)
+        self.assertEqual(len(rpc_resp), 0)
+        self.assertEqual(len(rpc_err), 1)
+
+        rpc_err = rpc_err[0]
+        self.assertEqual(type(rpc_err), jsonrpc.JsonRpc_InvalidRequest)
+
+    def test_request_error_batch_invalid_json(self):
+        req = '[\
                         {"jsonrpc": "2.0", "method": "sum", "params": [1,2,4], "id": "1"},\
                         {"jsonrpc": "2.0", "method"\
                     ]'
         
-        test = rpc.JsonRpcPacket(test_str)
-        requests = test.getRequests()
-        self.assertEqual(len(requests), 0)
+        resp = requests.post('http://localhost:6780/', data=req)
+        self.assertEqual(resp.status_code, 200)
+
+        rpc_req, rpc_resp, rpc_err = jsonrpc.decode(resp.content)
+
+        self.assertEqual(len(rpc_req), 0)
+        self.assertEqual(len(rpc_resp), 0)
+        self.assertEqual(len(rpc_err), 1)
+
+        rpc_err = rpc_err[0]
+        self.assertEqual(type(rpc_err), jsonrpc.JsonRpc_ParseError)
+
+    def test_request_error_batch_empty(self):
+        req = '[]'
         
-        errors = test.getErrors()
-        self.assertEqual(len(errors), 1)
-        self.assertEqual(type(errors[0]), rpc.JsonRpc_ParseError)
+        resp = requests.post('http://localhost:6780/', data=req)
+        self.assertEqual(resp.status_code, 200)
+
+        rpc_req, rpc_resp, rpc_err = jsonrpc.decode(resp.content)
+
+        self.assertEqual(len(rpc_req), 0)
+        self.assertEqual(len(rpc_resp), 0)
+        self.assertEqual(len(rpc_err), 1)
+
+        rpc_err = rpc_err[0]
+        self.assertEqual(type(rpc_err), jsonrpc.JsonRpc_InvalidRequest)
+
+    def test_request_error_batch_invalid_nonempty(self):
+        req = '[1]'
         
-    def test_decode_error_batch_empty(self):
-        test_str = '[]'
+        resp = requests.post('http://localhost:6780/', data=req)
+        self.assertEqual(resp.status_code, 200)
+
+        rpc_req, rpc_resp, rpc_err = jsonrpc.decode(resp.content)
+
+        self.assertEqual(len(rpc_req), 0)
+        self.assertEqual(len(rpc_resp), 0)
+        self.assertEqual(len(rpc_err), 1)
+
+        rpc_err = rpc_err[0]
+        self.assertEqual(type(rpc_err), jsonrpc.JsonRpc_InvalidRequest)
+
+    def test_request_error_parse_invalid_batch(self):
+        req = '[1,2,3]'
         
-        test = rpc.JsonRpcPacket(test_str)
-        requests = test.getRequests()
-        self.assertEqual(len(requests), 0)
-        
-        errors = test.getErrors()
-        self.assertEqual(len(errors), 1)
-        self.assertEqual(type(errors[0]), rpc.JsonRpc_InvalidRequest)
-        
-    def test_decode_error_batch_invalid_nonempty(self):
-        test_str = '[1]'
-        
-        test = rpc.JsonRpcPacket(test_str)
-        requests = test.getRequests()
-        self.assertEqual(len(requests), 0)
-        
-        errors = test.getErrors()
-        self.assertEqual(len(errors), 1)
-        self.assertEqual(type(errors[0]), rpc.JsonRpc_InvalidRequest)
-        
-    def test_decode_error_parse_invalid_batch(self):
-        test_str = '[1,2,3]'
-        
-        test = rpc.JsonRpcPacket(test_str)
-        requests = test.getRequests()
-        self.assertEqual(len(requests), 0)
-        
-        errors = test.getErrors()
-        self.assertEqual(len(errors), 3)
-        self.assertEqual(type(errors[0]), rpc.JsonRpc_InvalidRequest)
-        self.assertEqual(type(errors[1]), rpc.JsonRpc_InvalidRequest)
-        self.assertEqual(type(errors[2]), rpc.JsonRpc_InvalidRequest)
-    
-    def test_decode_multi(self):
-        test_str = '[{"jsonrpc": "2.0", "method": "test1", "params": {}, "id": 1}, \
-                     {"jsonrpc": "2.0", "method": "test2", "params": {}, "id": 2}]'
-        
-        test = rpc.JsonRpcPacket(test_str)
-        requests = test.getRequests()
-        self.assertEqual(len(requests), 2)
-        self.assertEqual(requests[0].getMethod(), 'test1')
-        
-    def test_response(self):
-        test = rpc.JsonRpcPacket()
-        test.addResponse(1, True)
-        
-        responses = test.getResponses()
-        self.assertEqual(len(responses), 1)
-        self.assertEqual(responses[0].getResult(), True)
+        resp = requests.post('http://localhost:6780/', data=req)
+        self.assertEqual(resp.status_code, 200)
+
+        rpc_req, rpc_resp, rpc_err = jsonrpc.decode(resp.content)
+
+        self.assertEqual(len(rpc_req), 0)
+        self.assertEqual(len(rpc_resp), 0)
+        self.assertEqual(len(rpc_err), 3)
+
+        self.assertEqual(type(rpc_err[0]), jsonrpc.JsonRpc_InvalidRequest)
+        self.assertEqual(type(rpc_err[1]), jsonrpc.JsonRpc_InvalidRequest)
+        self.assertEqual(type(rpc_err[2]), jsonrpc.JsonRpc_InvalidRequest)
+
+    def test_request_batch(self):
+        req = '[{"jsonrpc": "2.0", "method": "subtract", "params": [100, 10], "id": 1}, \
+                {"jsonrpc": "2.0", "method": "subtract", "params": [99, 11], "id": 2}]'
+
+        resp = requests.post('http://localhost:6780/', data=req)
+        self.assertEqual(resp.status_code, 200)
+
+        rpc_req, rpc_resp, rpc_err = jsonrpc.decode(resp.content)
+
+        self.assertEqual(len(rpc_req), 0)
+        self.assertEqual(len(rpc_resp), 2)
+        self.assertEqual(len(rpc_err), 0)
+
+        self.assertEqual(rpc_resp[0].result, 90)
+        self.assertEqual(rpc_resp[0].id, 1)
+        self.assertEqual(rpc_resp[1].result, 88)
+        self.assertEqual(rpc_resp[1].id, 2)
+
         

@@ -16,8 +16,9 @@ class HttpTransport(object):
     """
     HTTP Transport class based on the Transport class of xmlrpclib.py
     """
+    VERSION = '1.0'
 
-    user_agent = 'ptx-rpc/1.0'
+    user_agent = 'ptx-rpc/%s' % VERSION
     content_type = 'application/json'
 
     def __init__(self):
@@ -62,9 +63,10 @@ class HttpTransport(object):
 
             # Get response
             resp = conn.getresponse(buffering=True)
+            # TODO: How do we set the timeout for getresponse?
 
             if resp.status == 200:
-                return self.parse_response(resp)
+                return resp.read()
 
         except Exception:
             self.close()
@@ -162,6 +164,10 @@ class PtxRpcClient(object):
         # self.port = port
         self.logger = kwargs.get('logger', logging)
 
+        # Timeout
+        self.timeout = kwargs.get('timeout')
+        # TODO: Implement timeout programming
+
         # Data Transport, http is the default
         self._transport = kwargs.get('transport', HttpTransport)()
 
@@ -217,7 +223,7 @@ class PtxRpcClient(object):
                                      kwargs=kwargs)
 
         # Encode the RPC Request
-        data = self.engine.encode([req], [], [])
+        data = self.engine.encode([req], [])
         
         # Send the encoded request
         with self.rpc_lock:

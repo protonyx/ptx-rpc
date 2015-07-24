@@ -1,11 +1,12 @@
-from jsonrpc import *
 
 #===============================================================================
-# Errors
+# Error Base Classes
 #===============================================================================
 
 class RpcError(RuntimeError):
-    pass
+    def __init__(self, *args, **kwargs):
+        RuntimeError.__init__(self)
+        self.id = kwargs.get('id', None)
 
 class RpcServerPortInUse(RpcError):
     pass
@@ -28,11 +29,6 @@ class RpcInvalidPacket(RpcError):
 class RpcMethodNotFound(RpcError):
     pass
 
-JsonRpc_to_RpcErrors = {JsonRpc_ParseError: RpcInvalidPacket,
-                      JsonRpc_InvalidRequest: RpcInvalidPacket,
-                      JsonRpc_MethodNotFound: RpcMethodNotFound,
-                      JsonRpc_InvalidParams: RpcServerException,
-                      JsonRpc_InternalError: RpcError,
-                      JsonRpc_ServerException: RpcServerException}
+
     
 

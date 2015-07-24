@@ -68,6 +68,10 @@ class HttpTransport(object):
             if resp.status == 200:
                 return resp.read()
 
+        except socket.error as e:
+            if e.errno in [errno.ECONNREFUSED]:
+                raise RpcServerNotFound()
+
         except Exception:
             self.close()
             raise
@@ -178,10 +182,6 @@ class PtxRpcClient(object):
         self.rpc_lock = threading.Lock()
         
         self.methods = []
-
-        # Attempt a connection, throw exception if no response
-        # TODO: Do we even care if there was no response?
-        self._connect()
         
     def _resolveAddress(self, address):
         try:
@@ -203,7 +203,7 @@ class PtxRpcClient(object):
         return self.ready
     
     def _handleException(self, exception_object):
-        raise NotImplementedError
+        raise NotImplementedError()
     
     def _rpcCall(self, remote_method, *args, **kwargs):
         """
@@ -227,7 +227,7 @@ class PtxRpcClient(object):
         
         # Send the encoded request
         with self.rpc_lock:
-            resp_data = self._transport.single_request(self.host, self.path, data)
+            resp_data = self._transport.request(self.host, self.path, data)
 
         if resp_data is None:
             raise RpcError("Server returned empty data")
@@ -239,34 +239,35 @@ class PtxRpcClient(object):
             # There is a problem if there are more than one errors,
             # so just check the first one
             recv_error = errors[0]
-            if isinstance(recv_error, RpcInvalidPacket):
-                pass
-
-            elif isinstance(recv_error, RpcServerException):
-                pass
-
-            elif isinstance(recv_error, RpcMethodNotFound):
+            if isinstance(recv_error, RpcMethodNotFound):
                 raise AttributeError()
-
-            elif isinstance(recv_error, RpcError):
-                pass
-
             else:
-                raise RpcError()
+                raise recv_error
+
+            # if isinstance(recv_error, RpcInvalidPacket):
+            #     pass
+            #
+            # elif isinstance(recv_error, RpcServerException):
+            #     raise RuntimeError("RPC Server Exception")
+            #
+            # elif isinstance(recv_error, RpcError):
+            #     raise recv_error
+            #
+            # else:
+            #     raise RpcError()
 
 
         elif len(responses) == 1:
             resp = responses[0]
-            return resp.getResult()
+            return resp.result
 
         else:
             raise RpcInvalidPacket("An incorrectly formatted packet was received")
-
                     
         raise RpcTimeout("The operation timed out")
     
     def __str__(self):
-        return '<RPC Instance of %s:%s>' % (self.address, self.port)
+        return '<RPC Instance of %s>' % (self.uri)
 
     class _RpcMethod(object):
         """

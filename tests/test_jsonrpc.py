@@ -246,4 +246,21 @@ class RPC_Server_JsonRpc_Tests(unittest.TestCase):
         self.assertEqual(rpc_resp[1].result, 88)
         self.assertEqual(rpc_resp[1].id, 2)
 
-        
+    def test_jsonrpc_decode_invalid(self):
+        req = '123'
+
+        rpc_req, rpc_resp, rpc_err = jsonrpc.decode(req)
+
+        self.assertEqual(len(rpc_req), 0)
+        self.assertEqual(len(rpc_resp), 0)
+        self.assertEqual(len(rpc_err), 1)
+
+        self.assertEqual(type(rpc_err[0]), jsonrpc.JsonRpc_ParseError)
+
+    def test_jsonrpc_encode_empty(self):
+        data_out = jsonrpc.encode([], [])
+
+        self.assertEqual(data_out, '')
+
+if __name__ == '__main__':
+    unittest.main()

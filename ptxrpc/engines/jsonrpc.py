@@ -45,47 +45,29 @@ class JsonRpc_Error(errors.RpcError):
     def export(self):
         return error_encode(self)
 
-class JsonRpc_ParseError(errors.RpcInvalidPacket):
+class JsonRpc_ParseError(errors.RpcInvalidPacket, JsonRpc_Error):
     code = -32700
     message = 'Invalid JSON was received by the server.'
 
-    def export(self):
-        return error_encode(self)
-
-class JsonRpc_InvalidRequest(errors.RpcInvalidPacket):
+class JsonRpc_InvalidRequest(errors.RpcInvalidPacket, JsonRpc_Error):
     code = -32600
     message = 'The JSON sent is not a valid Request object.'
 
-    def export(self):
-        return error_encode(self)
-
-class JsonRpc_MethodNotFound(errors.RpcMethodNotFound):
+class JsonRpc_MethodNotFound(errors.RpcMethodNotFound, JsonRpc_Error):
     code = -32601
     message = 'The method does not exist / is not available.'
 
-    def export(self):
-        return error_encode(self)
-
-class JsonRpc_InvalidParams(errors.RpcServerException):
+class JsonRpc_InvalidParams(errors.RpcServerException, JsonRpc_Error):
     code = -32602
     message = 'Invalid method parameter(s).'
 
-    def export(self):
-        return error_encode(self)
-
-class JsonRpc_InternalError(errors.RpcServerException):
+class JsonRpc_InternalError(errors.RpcServerException, JsonRpc_Error):
     code = -32603
     message = 'Internal JSON-RPC error.'
 
-    def export(self):
-        return error_encode(self)
-
-class JsonRpc_ServerException(errors.RpcServerException):
+class JsonRpc_ServerException(errors.RpcServerException, JsonRpc_Error):
     code = -32000
     message = 'An unhandled server exception occurred'
-
-    def export(self):
-        return error_encode(self)
 
 JsonRpcErrors = {  -32700: JsonRpc_ParseError,
                    -32600: JsonRpc_InvalidRequest,
@@ -96,6 +78,7 @@ JsonRpcErrors = {  -32700: JsonRpc_ParseError,
                  # -32000 to -32099 are reserved server-errors
 
 JsonRpc_error_map = {
+                    errors.RpcError: JsonRpc_InternalError,
                     errors.RpcInvalidPacket: JsonRpc_InvalidRequest,
                     errors.RpcMethodNotFound: JsonRpc_MethodNotFound,
                     errors.RpcServerException: JsonRpc_ServerException
@@ -121,12 +104,6 @@ class JsonRpc_Request(RpcRequest):
         else:
             self.kwargs = kwargs
             self.args = args
-        
-    def getID(self):
-        return self.id
-    
-    def getMethod(self):
-        return self.method
         
     def export(self):
         # Slight modification of the JSON RPC 2.0 specification to allow 
@@ -155,12 +132,6 @@ class JsonRpc_Response(RpcResponse):
 
         self.id = rpc_dict.get('id', None)
         self.result = rpc_dict.get('result', None)
-        
-    def getID(self):
-        return self.id
-        
-    def getResult(self):
-        return self.result
         
     def export(self):
         ret = {'jsonrpc': '2.0',

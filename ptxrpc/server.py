@@ -150,7 +150,7 @@ class PtxRpcServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
             if on root (server) path:
                 list of registered objects and paths
             """
-            response = 'GET test'
+            response = ''
             self.send_response(200)
             self.send_header("Content-length", str(len(response)))
             self.end_headers()

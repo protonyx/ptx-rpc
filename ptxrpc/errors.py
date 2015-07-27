@@ -1,3 +1,5 @@
+__all__ = ['RpcServerPortInUse', 'RpcServerNotFound', 'RpcServerUnresponsive',
+           'RpcTimeout', 'RpcServerException', 'RpcInvalidPacket', 'RpcMethodNotFound']
 
 #===============================================================================
 # Error Base Classes

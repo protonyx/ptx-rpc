@@ -12,6 +12,8 @@ import requests
 from errors import *
 from engines import RpcRequest, RpcResponse
 
+__all__ = ['PtxRpcClient']
+
 class HttpTransport(object):
     """
     HTTP Transport class based on the Transport class of xmlrpclib.py

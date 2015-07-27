@@ -1,7 +1,5 @@
 import threading
-import Queue
 import socket
-import select
 import logging
 import inspect
 import errno
@@ -16,6 +14,7 @@ import engines
 from errors import *
 from engines import RpcRequest, RpcResponse
 
+__all__ = ['PtxRpcServer']
 
 class PtxRpcServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
     """
@@ -48,7 +47,7 @@ class PtxRpcServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
 
         self.logger = kwargs.get('logger', logging)
         self.port = kwargs.get('port', 0)
-        self.name = 'RpcServer'
+        self.name = kwargs.get('name', 'RpcServer')
 
         # Encode/Decode Engine, jsonrpc is the default
         engine_name = kwargs.get('engine', 'jsonrpc')

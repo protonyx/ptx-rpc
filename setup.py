@@ -6,15 +6,15 @@ Setuptools build file
 
 # Version (Semantic Versioning)
 VER_MAJOR = 0
-VER_MINOR = 1
+VER_MINOR = 9
 VER_PATCH = 0
 
 # Is this a release version? If so, additional data is appended to full version
 RELEASE = False
 
 # Release type
-REL_TYPE = 'dev0'    # Development Release
-# REL_TYPE = 'alpha0' # Alpha Release
+# REL_TYPE = 'dev0'    # Development Release
+REL_TYPE = 'alpha0' # Alpha Release
 # REL_TYPE = 'beta0'  # Beta Release
 # REL_TYPE = 'rc1'    # Release Candidate
 

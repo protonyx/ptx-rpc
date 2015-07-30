@@ -9,7 +9,7 @@ install:
 
 # command to run tests
 script: 
-  - python setup.py test
+  - coverage run --source=labtronyx setup.py test
 
 after_success:
   coveralls

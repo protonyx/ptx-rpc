@@ -34,13 +34,11 @@ class PtxRpcServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
         protected and will not be invoked
     """
 
-    DEBUG_RPC_SERVER = False
-
     allow_reuse_address = True
     
     def __init__(self, host, port, **kwargs):
         try:
-            SocketServer.TCPServer.__init__(self, (host, port), self.RpcDispatcher)
+            BaseHTTPServer.HTTPServer.__init__(self, (host, port), self.RpcDispatcher)
         except socket.error as e:
             if e.errno == errno.EADDRINUSE:
                 raise RpcServerPortInUse()
@@ -61,11 +59,10 @@ class PtxRpcServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
 
         self.rpc_startTime = datetime.now()
 
-        if self.DEBUG_RPC_SERVER:
-            self.logger.debug('[%s] RPC Server started on port %i', self.name, self.port)
-
         # Update port if randomly assigned
         self.address, self.port = self.socket.getsockname()
+
+        self.logger.debug('[%s] RPC Server started on port %i', self.name, self.port)
 
     #===========================================================================
     # RPC Request Dispatcher
@@ -255,18 +252,3 @@ class PtxRpcServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
         """
         delta = datetime.now() - self.rpc_startTime
         return delta.total_seconds()
-
-if __name__ == '__main__':
-    import mock
-
-    # Create a test object
-    test = mock.MagicMock()
-    del test._rpc
-
-    # Start the RPC server
-    srv = PtxRpcServer(host='localhost', port=6780)
-    srv.register_path('/', test)
-
-    # Start the server in a new thread
-    srv_thread = threading.Thread(target=srv.serve_forever)
-    srv_thread.start()

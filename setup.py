@@ -10,7 +10,7 @@ VER_MINOR = 9
 VER_PATCH = 0
 
 # Is this a release version? If so, additional data is appended to full version
-RELEASE = False
+RELEASE = True
 
 # Release type
 # REL_TYPE = 'dev0'    # Development Release
@@ -23,11 +23,6 @@ REL_TYPE = 'alpha0' # Alpha Release
 # -----------------------------------------------------------------------
 
 VERSION = '%d.%d.%d' % (VER_MAJOR, VER_MINOR, VER_PATCH)
-
-import os
-import sys
-import time
-from setuptools import find_packages
 
 def build_package():
 
@@ -43,7 +38,37 @@ def build_package():
         author="Kevin Kennedy",
         author_email="protonyx@users.noreply.github.com",
 
+        # License
         license="MIT",
+
+        # Details
+        url="https://github.com/protonyx/ptx-rpc",
+
+        # Description
+        description='Asymmetric Python RPC Library with a REST API and JSON-RPC transport',
+
+        # Long Description
+        long_description=open("readme.rst").read(),
+
+        # Keywords
+        keywords='RPC,JSON-RPC',
+
+        # Classifiers
+        classifiers=[
+            "Development Status :: 3 - Alpha",
+            "Intended Audience :: Developers",
+            "Topic :: Software Development :: Libraries",
+            "License :: OSI Approved :: MIT License",
+            "Operating System :: Microsoft :: Windows",
+            "Operating System :: POSIX :: Linux",
+            "Operating System :: MacOS :: MacOS X",
+            "Programming Language :: Python",
+            "Programming Language :: Python :: 2.7",
+            "Topic :: Software Development :: Libraries :: Python Modules"
+        ],
+
+        # Platforms
+        platforms=["Windows", "Mac OS-X", "Linux"],
 
         # Packages
         packages=['ptxrpc'],
@@ -52,18 +77,6 @@ def build_package():
         #package_data = {},
         # Include additional files into the package
         include_package_data=True,
-
-        # Details
-        url="https://github.com/protonyx/ptx-rpc",
-
-        #
-        # license="LICENSE.txt",
-        description='PTX-RPC',
-
-        # Platforms
-        platforms=["Windows", "Mac OS-X", "Linux"],
-
-        # long_description=open("README.txt").read(),
 
         # Dependent packages (distributions)
         install_requires=[

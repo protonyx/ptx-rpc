@@ -1,14 +1,18 @@
 PTX-RPC |build-status| |coverage| |codacy|
 ==========================================
 
-PTX-RPC is an asymmetric Python RPC Library with a REST-like API and JSON-RPC transport.
+PTX-RPC is an asymmetric Python RPC Library with a REST API and JSON-RPC transport.
 
 |license|
 
 Installing
 ==========
 
-Console commands::
+Using pip::
+
+   pip install ptx-rpc
+
+From source::
 
    python setup.py install
 
@@ -16,7 +20,6 @@ Requirements
 ============
 
 * Python 2.7
-* json
 * requests
 
 .. |build-status| image:: https://travis-ci.org/protonyx/ptx-rpc.svg?branch=master

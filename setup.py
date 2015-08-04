@@ -7,7 +7,7 @@ Setuptools build file
 # Version (Semantic Versioning)
 VER_MAJOR = 0
 VER_MINOR = 9
-VER_PATCH = 0
+VER_PATCH = 1
 
 # Is this a release version? If so, additional data is appended to full version
 RELEASE = True

@@ -1,16 +1,14 @@
 import threading
 import socket
-import select
 import logging
 import errno
 import string
 import httplib
 import importlib
 
-import requests
-
-from errors import *
-from engines import RpcRequest, RpcResponse
+# Local imports
+from .errors import *
+from .engines import RpcRequest, RpcResponse
 
 __all__ = ['PtxRpcClient']
 

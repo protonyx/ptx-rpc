@@ -10,9 +10,8 @@ import SocketServer
 import BaseHTTPServer
 
 # Local Imports
-import engines
-from errors import *
-from engines import RpcRequest, RpcResponse
+from .errors import *
+from .engines import RpcRequest, RpcResponse
 
 __all__ = ['PtxRpcServer']
 

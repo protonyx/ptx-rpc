@@ -7,7 +7,7 @@ Setuptools build file
 # Version (Semantic Versioning)
 VER_MAJOR = 0
 VER_MINOR = 9
-VER_PATCH = 1
+VER_PATCH = 2
 
 # Is this a release version? If so, additional data is appended to full version
 RELEASE = True
@@ -48,7 +48,7 @@ def build_package():
         description='Asymmetric Python RPC Library with a REST API and JSON-RPC transport',
 
         # Long Description
-        long_description=open("readme.rst").read(),
+        long_description=open("README").read(),
 
         # Keywords
         keywords='RPC,JSON-RPC',

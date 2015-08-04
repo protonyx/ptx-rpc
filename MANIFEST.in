@@ -1,0 +1,4 @@
+include README CHANGES LICENSE
+recursive-include ptxrpc *
+recursive-include docs *
+global-exclude *.pyc *~ .DS_Store *__pycache__* *.pyo
